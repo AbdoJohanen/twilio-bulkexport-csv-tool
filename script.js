@@ -1,6 +1,8 @@
 require('dotenv').config();
 const axios = require('axios');
 const fsExtra = require('fs-extra');
+const cliProgress = require('cli-progress');
+const colors = require('ansi-colors');
 const path = require('path');
 const { join } = path;
 
@@ -15,7 +17,7 @@ const userEnd = process.argv[4];   // Third argument is end date (YYYY-MM-DD)
 
 // Validate job identifier is provided
 if (!jobIdentifier) {
-  console.error("Error: Job identifier (SID or name) is required.");
+  console.error('Error: Job identifier (SID or "name") is required.');
   console.log("Usage: node script.js <jobSID_or_name> [YYYY-MM-DD] [YYYY-MM-DD]");
   process.exit(1);
 }
@@ -33,7 +35,7 @@ if ((userStart && !userEnd) || (!userStart && userEnd)) {
   process.exit(1);
 }
 
-// Function to sanitize job name for folder creation
+// Function to fix job name for folder creation _ instead of spaces
 function sanitizeFolderName(name) {
   return name.replace(/[^a-zA-Z0-9_-]/g, '_').replace(/_{2,}/g, '_');
 }
@@ -131,7 +133,7 @@ async function listExportCustomJobs() {
 /**
   * Download a day file directly from Twilio API with retry functionality
 */
-async function downloadWithRetry(dayStr, jobFolder, index, total, maxRetries = 2) {
+async function downloadWithRetry(dayStr, jobFolder, index, total, progressBar, maxRetries = 2) {
   let attempts = 0;
   let lastError = null;
   
@@ -139,7 +141,7 @@ async function downloadWithRetry(dayStr, jobFolder, index, total, maxRetries = 2
     try {
       attempts++;
       
-      // If this is a retry, log it
+      // If this is a retry, log it (still show retries)
       if (attempts > 1) {
         console.log(`⟳ [${index+1}/${total}] Retry attempt ${attempts-1}/${maxRetries} for ${dayStr}...`);
       }
@@ -165,7 +167,6 @@ async function downloadWithRetry(dayStr, jobFolder, index, total, maxRetries = 2
       // Wait for the file to finish writing
       const result = await new Promise((resolve, reject) => {
         writer.on('finish', () => {
-          console.log(`✓ [${index+1}/${total}] Downloaded ${dayStr} (${contentLength || 'unknown'} bytes)`);
           resolve({ dayStr, filePath, size: contentLength });
         });
         writer.on('error', (err) => {
@@ -290,18 +291,68 @@ async function downloadCustomJobExports() {
         
     // Process all days at once with maximum concurrency
     console.log(`Starting ${daysToDownload.length} concurrent downloads...`);
-    
-    // Create a promise for each day's download
-    const downloadPromises = daysToDownload.map((dayStr, index) => {
-      return downloadWithRetry(dayStr, jobFolder, index, daysToDownload.length)
-        .catch(error => {
-          // This will only be called if all retry attempts fail
-          return null;
-        });
+
+    // Initialize counters
+    let completedCount = 0;
+    let failedCount = 0;
+    let totalBytes = 0;
+
+    // Create a progress bar
+    const progressBar = new cliProgress.SingleBar({
+      format: `${colors.cyan('{bar}')} {percentage}% | {value}/{total} | ETA: {eta_formatted} | Speed: {speed} files/s | {size} MB`,
+      hideCursor: true,
+      clearOnComplete: false,
+    }, cliProgress.Presets.shades_classic);
+
+    // Start the progress bar
+    progressBar.start(daysToDownload.length, 0, {
+      speed: "0.0",
+      size: "0.0"
     });
-    
+
+    // Create a promise for each day's download
+    const downloadPromises = daysToDownload.map(async (dayStr, index) => {
+      try {
+        const result = await downloadWithRetry(dayStr, jobFolder, index, daysToDownload.length, progressBar);
+        completedCount++;
+
+        // Add to total bytes
+        if (result.size) {
+          totalBytes += parseInt(result.size);
+        }
+
+        // Calculate progress stats
+        const elapsedSecs = (Date.now() - startTime) / 1000;
+        const speed = elapsedSecs > 0 ? (completedCount / elapsedSecs).toFixed(1) : '0.0';
+        const mbSize = totalBytes / (1024 * 1024);
+
+        // Update progress bar
+        progressBar.update(completedCount + failedCount, {
+          speed: speed,
+          size: mbSize.toFixed(1)
+        });
+        return result;
+      } catch (error) {
+        failedCount++;
+
+        // Update progress bar for failures too
+        progressBar.update(completedCount + failedCount);
+        return null;
+      }
+    });
+
     // Process all downloads concurrently
     const results = await Promise.all(downloadPromises);
+
+    // Stop the progress bar
+    progressBar.stop();
+
+    // Then after the progress bar is done, show completion
+    if (failedCount > 0) {
+      console.log(colors.red(`\n✗ Completed with ${failedCount} failed downloads`));
+    } else {
+      console.log(colors.green(`\n✓ All ${completedCount} downloads completed successfully`));
+    }
     
     // Calculate results
     const successCount = results.filter(result => result !== null).length;
@@ -320,7 +371,6 @@ async function downloadCustomJobExports() {
           console.log(`Total days in selected date range: ${totalDaysInRange}`);
           console.log(`Days with data in range: ${daysToDownload.length}`);
           console.log(`Days with no data in range (skipped): ${emptyDaysInRange.length}`);
-          console.log(`Days outside job scope: ${daysOutsideJobScope}`);
         } else {
           console.log(`Downloaded full job data (no date filter applied)`);
         }
