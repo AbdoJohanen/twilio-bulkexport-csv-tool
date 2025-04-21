@@ -1,9 +1,26 @@
 const axios = require('axios');
 const fsExtra = require('fs-extra');
 const { join } = require('path');
-const cliProgress = require('cli-progress');
-const colors = require('ansi-colors');
-const config = require('./config');
+const config = require('../../config/config');
+const { createProgressBar } = require('../../utils/progress');
+const { client, BASE_URL } = require('./client');
+const { generateDaysBetweenDates } = require('../../utils/dateUtils');
+const { colors, cliProgress } = require('../../utils/progress');
+
+/**
+ * Lists custom export jobs for Messages from Twilio.
+ */
+async function listExportCustomJobs() {
+  try {
+    const jobsUrl = `${config.twilioBaseUrl}/Jobs?PageSize=1000`;
+    const response = await axios.get(jobsUrl, { auth: config.auth });
+    const jobs = response.data.jobs || response.data;
+    return jobs;
+  } catch (error) {
+    console.error("Error listing export custom jobs:", error.message);
+    throw error;
+  }
+}
 
 /**
  * Replace characters in a job name to create a valid folder name.
@@ -48,39 +65,6 @@ function extractDaysFromJob(job) {
   }
 }
 
-/**
- * Generate an array of date strings (YYYY-MM-DD) between two dates (inclusive).
- */
-function generateDaysBetweenDates(startDay, endDay) {
-  let days = [];
-  let current = new Date(`${startDay}T12:00:00`);
-  const final = new Date(`${endDay}T12:00:00`);
-  final.setDate(final.getDate() + 1);
-
-  while (current < final) {
-    const year = current.getFullYear();
-    const month = String(current.getMonth() + 1).padStart(2, '0');
-    const day = String(current.getDate()).padStart(2, '0');
-    days.push(`${year}-${month}-${day}`);
-    current.setDate(current.getDate() + 1);
-  }
-  return days;
-}
-
-/**
- * Lists custom export jobs for Messages from Twilio.
- */
-async function listExportCustomJobs() {
-  try {
-    const jobsUrl = `${config.twilioBaseUrl}/Jobs?PageSize=1000`;
-    const response = await axios.get(jobsUrl, { auth: config.auth });
-    const jobs = response.data.jobs || response.data;
-    return jobs;
-  } catch (error) {
-    console.error("Error listing export custom jobs:", error.message);
-    throw error;
-  }
-}
 
 /**
  * Download a single day's export file with retry functionality.
@@ -289,10 +273,8 @@ async function downloadCustomJobExports({ jobIdentifier, userStart, userEnd }) {
 }
 
 module.exports = {
+  downloadCustomJobExports,
   sanitizeFolderName,
   extractDaysFromJob,
-  generateDaysBetweenDates,
-  listExportCustomJobs,
-  downloadWithRetry,
-  downloadCustomJobExports,
+  listExportCustomJobs
 };

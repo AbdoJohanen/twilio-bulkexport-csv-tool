@@ -1,4 +1,5 @@
 const { exit } = require('process');
+const { validateDate, validateDateRange } = require('./validation');
 
 /**
  * Parse and validate command-line arguments.
@@ -23,13 +24,16 @@ function parseArguments() {
   }
 
   if (userStart && userEnd) {
-    const dateRegex = /^\d{4}-\d{2}-\d{2}$/;
-    if (!dateRegex.test(userStart) || !dateRegex.test(userEnd)) {
-      console.error('Error: Dates must be in YYYY-MM-DD format.');
+    try {
+      validateDate(userStart);
+      validateDate(userEnd);
+      validateDateRange(userStart, userEnd);
+      console.log(`Date range filter: ${userStart} to ${userEnd}`);
+    } catch (error) {
+      console.error(`Error: ${error.message}`);
       console.log('Usage: node index.js [YYYY-MM-DD] [YYYY-MM-DD]');
       exit(1);
     }
-    console.log(`Date range filter: ${userStart} to ${userEnd}`);
   }
 
   return { jobIdentifier, userStart, userEnd };

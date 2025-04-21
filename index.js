@@ -1,19 +1,10 @@
-const fsExtra = require('fs-extra');
-const config = require('./config');
-const { parseArguments } = require('./cli');
-const { downloadCustomJobExports } = require('./twilioClient');
-const { processFiles } = require('./fileProcessor');
+const { runAutomation } = require('./src/services/automationService');
+const { helpText } = require('./src/utils/help');
 
-(async () => {
-  // Parse CLI arguments
-  const args = parseArguments();
+// Show usage if --help is passed
+if (process.argv.includes('--help') || process.argv.includes('-h')) {
+  console.log(helpText);
+  process.exit(0);
+}
 
-  // Ensure downloads folder exists (from config)
-  fsExtra.ensureDirSync(config.downloadsFolder);
-
-  // Download the export files from Twilio and get the main job folder path
-  const jobFolder = await downloadCustomJobExports(args);
-
-  // Process the downloaded files: decompress, parse JSON, and convert to CSV.
-  await processFiles(jobFolder);
-})();
+runAutomation(process.argv.slice(2));
