@@ -10,6 +10,9 @@ USAGE
   npm run download:custom <start> <end>   # Download custom date range
 
 EXAMPLES
+  # You can display available commands and usage examples at any time by running:
+  npm run help
+
   # Download last week's data
   npm run download:last-week
 
@@ -25,16 +28,6 @@ EXAMPLES
 
   # Download with custom name
   npm run download:custom -- --name quarterly_report 2025-04-01 2025-06-30
-
-LIMITATIONS
-  • Date range cannot exceed 366 days (Twilio API limitation)
-  • Account and subaccounts limited to 366 days total per UTC calendar day
-  • One data file generated per day in the range
-  • All dates must be in YYYY-MM-DD format
-
-OUTPUT
-  Downloads: ./downloads/<job_name>/
-  Processed: ./downloads/<job_name>/export.csv
 `;
 
 module.exports = { helpText };

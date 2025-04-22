@@ -60,6 +60,9 @@ The following commands are available via `npm` scripts:
 ### Examples
 
 ```bash
+# You can display available commands and usage examples at any time by running:
+npm run help
+
 # Download last week's logs
 npm run download:last-week
 
