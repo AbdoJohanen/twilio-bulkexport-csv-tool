@@ -79,7 +79,7 @@ async function createExportJob({ resourceType, startDay, endDay, friendlyName })
       friendlyName,
     });
     
-    logger.info("Created export job object:", JSON.stringify(job, null, 2));
+    logger.info(`Created export job object: ${JSON.stringify(job, null, 2)}`);
     return job;
   } catch (error) {
     throw new Error(`Failed to create export job: ${error.message}`);
