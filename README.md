@@ -11,6 +11,7 @@ A command-line tool for downloading and processing message logs from Twilio's Bu
 - Download logs for a custom date range (with optional job naming)
 - Converts `.json.gz` files into semicolon-separated `.csv` files
 - Handles large data exports with retry and progress bar support
+- Logs all actions to console and log files
 
 ---
 
