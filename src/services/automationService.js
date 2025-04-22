@@ -7,6 +7,12 @@ const { validateDate, validateDateRange } = require('../utils/validation');
 
 const resourceType = 'Messages';
 
+/**
+ * Main automation logic for orchestrating Twilio export job creation, polling, downloading, and processing.
+ * 
+ * @param {string[]} args - CLI arguments passed to the script.
+ * @returns {Promise<{ success: boolean, jobFolder?: string, error?: string }>}
+ */
 async function runAutomation(args) {
   try {
     let startDate, endDate, jobIdentifier, customJobName;

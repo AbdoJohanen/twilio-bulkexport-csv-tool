@@ -13,6 +13,7 @@ function getPreviousWeekDates() {
   };
 }
 
+
 /**
 * Gets the start and end dates for the previous month
 * @returns {{start: string, end: string}} Dates in YYYY-MM-DD format
@@ -25,8 +26,13 @@ function getPreviousMonthDates() {
   };
 }
 
+
 /**
- * Generate an array of date strings (YYYY-MM-DD) between two dates (inclusive).
+ * Generates an array of date strings (YYYY-MM-DD) between two given dates (inclusive).
+ * 
+ * @param {string} startDay - Start date in YYYY-MM-DD format.
+ * @param {string} endDay - End date in YYYY-MM-DD format.
+ * @returns {string[]} An array of date strings.
  */
 function generateDaysBetweenDates(startDay, endDay) {
   let days = [];

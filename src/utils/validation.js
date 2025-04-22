@@ -11,6 +11,7 @@ function validateDate(dateStr) {
     }
 }
 
+
 /**
  * Validates that a date range is valid and within Twilio's limits
  * @param {string} startDate - Start date in YYYY-MM-DD format

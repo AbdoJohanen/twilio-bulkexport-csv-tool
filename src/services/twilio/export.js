@@ -1,7 +1,12 @@
 const { client } = require('./client');
 
 /**
- * Gets a job's current status from Twilio
+ * Retrieves the export job by its SID from Twilio.
+ *
+ * @param {string} resourceType - The resource type (e.g. 'Messages').
+ * @param {string} jobSid - The SID of the export job to fetch.
+ * @returns {Promise<Object>} The Twilio export job object.
+ * @throws {Error} If the job is not found or API call fails.
  */
 async function getJob(resourceType, jobSid) {
   try {
@@ -20,6 +25,7 @@ async function getJob(resourceType, jobSid) {
     throw new Error(`Error getting job ${jobSid}: ${error.message}`);
   }
 }
+
 
 /**
  * Checks if a job is complete and has all expected days
@@ -59,6 +65,7 @@ function isJobComplete(job, expectedDays) {
       : `Job incomplete: ${completedDays}/${expectedDays} days ready`
   };
 }
+
 
 /**
  * Create a new export job for the given date range.
@@ -139,6 +146,7 @@ async function pollExportJobCompletion(resourceType, jobSid, expectedDays, maxWa
   throw new Error(`Job ${jobSid} didn't complete within ${maxWaitMinutes} minutes`);
 }
 
+
 /**
  * Check for an existing export job for the given date range that has all days (data or empty).
  */
@@ -173,7 +181,6 @@ async function findExistingJob(resourceType, startDate, endDate, expectedDays) {
     return null;
   }
 }
-
 
 module.exports = {
   createExportJob,

@@ -2,8 +2,6 @@ const axios = require('axios');
 const fsExtra = require('fs-extra');
 const { join } = require('path');
 const config = require('../../config/config');
-const { createProgressBar } = require('../../utils/progress');
-const { client, BASE_URL } = require('./client');
 const { generateDaysBetweenDates } = require('../../utils/dateUtils');
 const { colors, cliProgress } = require('../../utils/progress');
 
@@ -22,12 +20,14 @@ async function listExportCustomJobs() {
   }
 }
 
+
 /**
- * Replace characters in a job name to create a valid folder name.
+ * Converts a job name into a safe folder name by replacing non-alphanumeric characters.
  */
 function sanitizeFolderName(name) {
   return name.replace(/[^a-zA-Z0-9_-]/g, '_').replace(/_{2,}/g, '_');
 }
+
 
 /**
  * Extracts days with data and empty days from a job's details.
@@ -112,6 +112,7 @@ async function downloadWithRetry(dayStr, targetFolder, index, total, progressBar
   }
   throw lastError || new Error(`Failed to download ${dayStr} after ${maxRetries + 1} attempts`);
 }
+
 
 /**
  * Downloads export files for the given job.
