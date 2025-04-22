@@ -1,5 +1,5 @@
 {
-  "name": "twilio-logs-automation",
+  "name": "twilio-bulkexport-csv-tool",
   "version": "1.0.0",
   "description": "Twilio logs download and processing automation",
   "main": "index.js",

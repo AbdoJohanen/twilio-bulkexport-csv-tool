@@ -20,8 +20,8 @@ A command-line tool for downloading and processing message logs from Twilio's Bu
 ### 1. Clone the repository
 
 ```bash
-git clone https://github.com/AbdoJohanen/twilio-logs-automation.git
-cd twilio-logs-automation
+git clone https://github.com/AbdoJohanen/twilio-bulkexport-csv-tool.git
+cd twilio-bulkexport-csv-tool
 ```
 
 ### 2. Install dependencies
