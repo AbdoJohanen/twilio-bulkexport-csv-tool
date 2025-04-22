@@ -3,6 +3,7 @@ const fsExtra = require('fs-extra');
 const path = require('path');
 const zlib = require('zlib');
 const readline = require('readline');
+const logger = require('../utils/logger');
 
 /**
  * Process downloaded .json.gz files:
@@ -16,13 +17,13 @@ const readline = require('readline');
  * @param {string} jobFolder - The folder where the job data is stored.
  */
 async function processFiles(jobFolder) {
-  console.log(`Processing files in folder: ${jobFolder}`);
+  logger.info(`Processing files in folder: ${jobFolder}`);
 
   // Files are located in the "files" subfolder
   const filesDir = path.join(jobFolder, 'files');
   const files = await fsExtra.readdir(filesDir);
   const jsonGzFiles = files.filter(file => file.endsWith('.json.gz'));
-  console.log(`Found ${jsonGzFiles.length} .json.gz files to process.`);
+  logger.info(`Found ${jsonGzFiles.length} .json.gz files to process.`);
 
   // Process each file concurrently.
   const fileProcessPromises = jsonGzFiles.map(async (filename) => {
@@ -51,7 +52,7 @@ async function processFiles(jobFolder) {
         record.fileDate = fileDate;
         records.push(record);
       } catch (err) {
-        console.error(`Error parsing JSON in file ${filename}: ${err.message}`);
+        logger.error(`Error parsing JSON in file ${filename}: ${err.message}`);
       }
     }
     return records;
@@ -68,7 +69,7 @@ async function processFiles(jobFolder) {
     return 0;
   });
 
-  console.log(`Total records processed: ${allRecords.length}`);
+  logger.info(`Total records processed: ${allRecords.length}`);
 
   // Determine CSV columns based on union of keys across all records.
   const allKeys = new Set();
@@ -118,7 +119,7 @@ async function processFiles(jobFolder) {
   // Save the CSV file in the main job folder (not in the "files" subfolder)
   const outputPath = path.join(jobFolder, 'export.csv');
   await fsExtra.writeFile(outputPath, csvContent);
-  console.log(`CSV file has been written to: ${outputPath}`);
+  logger.info(`CSV file has been written to: ${outputPath}`);
 }
 
 module.exports = { processFiles };

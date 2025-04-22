@@ -13,7 +13,7 @@ function createProgressBar() {
             clearOnComplete: false,
         }, cliProgress.Presets.shades_classic);
     } catch (error) {
-        console.error('Failed to create progress bar:', error.message);
+        logger.error('Failed to create progress bar:', error.message);
         // Return a dummy progress bar that does nothing
         return {
             start: () => {},

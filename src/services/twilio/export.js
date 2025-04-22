@@ -1,4 +1,5 @@
 const { client } = require('./client');
+const logger = require('../../utils/logger');
 
 /**
  * Retrieves the export job by its SID from Twilio.
@@ -78,7 +79,7 @@ async function createExportJob({ resourceType, startDay, endDay, friendlyName })
       friendlyName,
     });
     
-    console.log("Created export job object:", JSON.stringify(job, null, 2));
+    logger.info("Created export job object:", JSON.stringify(job, null, 2));
     return job;
   } catch (error) {
     throw new Error(`Failed to create export job: ${error.message}`);
@@ -121,22 +122,22 @@ async function pollExportJobCompletion(resourceType, jobSid, expectedDays, maxWa
           return sum;
         }, 0);
 
-        console.log(
+        logger.info(
           `Checking job ${jobSid}: ${completedDays}/${expectedDays} days ready ` +
           `(${daysWithData} with data, ${emptyDays} empty)`
         );
 
         if (completedDays >= expectedDays) {
-          console.log(`✔ Job ${jobSid} is now complete with all ${expectedDays} days ` +
+          logger.info(`✔ Job ${jobSid} is now complete with all ${expectedDays} days ` +
                      `(${daysWithData} with data, ${emptyDays} empty)`);
           return job;
         }
       } else {
-        console.log(`Checking job ${jobSid}: Waiting for job to start processing...`);
+        logger.info(`Checking job ${jobSid}: Waiting for job to start processing...`);
       }
 
     } catch (e) {
-      console.error(`Error checking job: ${e.message}`);
+      logger.error(`Error checking job: ${e.message}`);
     }
 
     await new Promise(r => setTimeout(r, pollIntervalMs));
@@ -162,13 +163,13 @@ async function findExistingJob(resourceType, startDate, endDate, expectedDays) {
       if (job.startDay === startDate && job.endDay === endDate) {
         const status = isJobComplete(job, expectedDays);
         
-        console.log(
+        logger.info(
           `Found existing job "${job.friendlyName}" (${job.jobSid}) for ${startDate}–${endDate}`
         );
-        console.log(`Status: ${status.message}`);
+        logger.info(`Status: ${status.message}`);
 
         if (!status.isComplete) {
-          console.log('Job exists but is not complete - will wait for completion');
+          logger.info('Job exists but is not complete - will wait for completion');
           return { job, needsWaiting: true };
         }
 
@@ -177,7 +178,7 @@ async function findExistingJob(resourceType, startDate, endDate, expectedDays) {
     }
     return null;
   } catch (error) {
-    console.error(`Error listing export jobs: ${error.message}`);
+    logger.error(`Error listing export jobs: ${error.message}`);
     return null;
   }
 }

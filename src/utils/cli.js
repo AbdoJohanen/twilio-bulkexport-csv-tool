@@ -1,5 +1,6 @@
 const { exit } = require('process');
 const { validateDate, validateDateRange } = require('./validation');
+const logger = require('../utils/logger');
 
 /**
  * Parse and validate command-line arguments.
@@ -12,14 +13,14 @@ function parseArguments() {
   const userEnd = args[2];
 
   if (!jobIdentifier) {
-    console.error('Error: Job identifier (SID or "name") is required.');
-    console.log('Usage: node index.js <jobSID_or_name> [YYYY-MM-DD] [YYYY-MM-DD]');
+    logger.error('Error: Job identifier (SID or "name") is required.');
+    logger.info('Usage: node index.js <jobSID_or_name> [YYYY-MM-DD] [YYYY-MM-DD]');
     exit(1);
   }
 
   if ((userStart && !userEnd) || (!userStart && userEnd)) {
-    console.error('Error: You must provide both start and end dates or neither.');
-    console.log('Usage: node index.js <jobSID_or_name> [YYYY-MM-DD] [YYYY-MM-DD]');
+    logger.error('Error: You must provide both start and end dates or neither.');
+    logger.info('Usage: node index.js <jobSID_or_name> [YYYY-MM-DD] [YYYY-MM-DD]');
     exit(1);
   }
 
@@ -28,10 +29,10 @@ function parseArguments() {
       validateDate(userStart);
       validateDate(userEnd);
       validateDateRange(userStart, userEnd);
-      console.log(`Date range filter: ${userStart} to ${userEnd}`);
+      logger.info(`Date range filter: ${userStart} to ${userEnd}`);
     } catch (error) {
-      console.error(`Error: ${error.message}`);
-      console.log('Usage: node index.js [YYYY-MM-DD] [YYYY-MM-DD]');
+      logger.error(`Error: ${error.message}`);
+      logger.info('Usage: node index.js [YYYY-MM-DD] [YYYY-MM-DD]');
       exit(1);
     }
   }

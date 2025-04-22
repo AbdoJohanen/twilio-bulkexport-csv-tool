@@ -4,6 +4,7 @@ const { join } = require('path');
 const config = require('../../config/config');
 const { generateDaysBetweenDates } = require('../../utils/dateUtils');
 const { colors, cliProgress } = require('../../utils/progress');
+const logger = require('../../utils/logger');
 
 /**
  * Lists custom export jobs for Messages from Twilio.
@@ -15,7 +16,7 @@ async function listExportCustomJobs() {
     const jobs = response.data.jobs || response.data;
     return jobs;
   } catch (error) {
-    console.error("Error listing export custom jobs:", error.message);
+    logger.error("Error listing export custom jobs:", error.message);
     throw error;
   }
 }
@@ -60,7 +61,7 @@ function extractDaysFromJob(job) {
       emptyDays: [...emptyDays]
     };
   } catch (error) {
-    console.error("Error extracting days from job:", error.message);
+    logger.error("Error extracting days from job:", error.message);
     return { daysWithData: [], emptyDays: [] };
   }
 }
@@ -77,7 +78,7 @@ async function downloadWithRetry(dayStr, targetFolder, index, total, progressBar
     try {
       attempts++;
       if (attempts > 1) {
-        console.log(`⟳ [${index + 1}/${total}] Retry attempt ${attempts - 1}/${maxRetries} for ${dayStr}...`);
+        logger.info(`⟳ [${index + 1}/${total}] Retry attempt ${attempts - 1}/${maxRetries} for ${dayStr}...`);
       }
 
       const dayUrl = `${config.twilioBaseUrl}/Days/${encodeURIComponent(dayStr)}`;
@@ -102,7 +103,7 @@ async function downloadWithRetry(dayStr, targetFolder, index, total, progressBar
     } catch (error) {
       lastError = error;
       if (attempts > maxRetries) {
-        console.log(`✗ [${index + 1}/${total}] Failed to download ${dayStr} after ${maxRetries + 1} attempts: ${error.message}`);
+        logger.info(`✗ [${index + 1}/${total}] Failed to download ${dayStr} after ${maxRetries + 1} attempts: ${error.message}`);
       }
       if (attempts <= maxRetries) {
         const delay = 1000 * attempts;
@@ -121,10 +122,10 @@ async function downloadWithRetry(dayStr, targetFolder, index, total, progressBar
  * Files will be saved in downloads/job_name/files and the job folder itself is returned.
  */
 async function downloadCustomJobExports({ jobIdentifier, userStart, userEnd }) {
-  console.log("Starting Twilio export download...");
+  logger.info("Starting Twilio export download...");
 
   const jobs = await listExportCustomJobs();
-  console.log(`Found ${jobs.length} job(s).`);
+  logger.info(`Found ${jobs.length} job(s).`);
 
   const myJob = jobs.find(job =>
     job.job_sid === jobIdentifier ||
@@ -132,27 +133,27 @@ async function downloadCustomJobExports({ jobIdentifier, userStart, userEnd }) {
   );
 
   if (!myJob) {
-    console.error(`Job not found with identifier: ${jobIdentifier}`);
-    console.log("Available jobs:");
-    jobs.forEach(job => console.log(` - ${job.friendly_name} (${job.job_sid})`));
+    logger.error(`Job not found with identifier: ${jobIdentifier}`);
+    logger.info("Available jobs:");
+    jobs.forEach(job => logger.info(` - ${job.friendly_name} (${job.job_sid})`));
     return;
   }
 
-  console.log(`Using job: "${myJob.friendly_name}" (SID: ${myJob.job_sid})`);
+  logger.info(`Using job: "${myJob.friendly_name}" (SID: ${myJob.job_sid})`);
 
   // Create the main job folder (downloads/job_name)
   const jobFolderName = myJob.friendly_name ? sanitizeFolderName(myJob.friendly_name) : myJob.job_sid;
   const jobFolder = join(config.downloadsFolder, jobFolderName);
   fsExtra.ensureDirSync(jobFolder);
-  console.log(`Created job folder: ${jobFolder}`);
+  logger.info(`Created job folder: ${jobFolder}`);
 
   // Create a subfolder for the downloaded files (downloads/job_name/files)
   const filesFolder = join(jobFolder, 'files');
   fsExtra.ensureDirSync(filesFolder);
-  console.log(`Created files folder: ${filesFolder}`);
+  logger.info(`Created files folder: ${filesFolder}`);
 
   const { daysWithData, emptyDays } = extractDaysFromJob(myJob);
-  console.log(`Job contains ${daysWithData.length} days with data and ${emptyDays.length} empty days.`);
+  logger.info(`Job contains ${daysWithData.length} days with data and ${emptyDays.length} empty days.`);
 
   let daysToDownload = daysWithData;
   let emptyDaysInRange = [];
@@ -168,31 +169,31 @@ async function downloadCustomJobExports({ jobIdentifier, userStart, userEnd }) {
     emptyDaysInRange = emptyDays.filter(day => userDateSet.has(day));
     daysOutsideJobScope = totalDaysInRange - daysToDownload.length - emptyDaysInRange.length;
 
-    console.log(`Date range filter applied: ${daysToDownload.length} days to download between ${userStart} and ${userEnd}.`);
+    logger.info(`Date range filter applied: ${daysToDownload.length} days to download between ${userStart} and ${userEnd}.`);
     if (emptyDaysInRange.length > 0) {
-      console.log(`Found ${emptyDaysInRange.length} days with no data in date range (will be skipped).`);
+      logger.info(`Found ${emptyDaysInRange.length} days with no data in date range (will be skipped).`);
     }
     if (daysOutsideJobScope > 0) {
-      console.log(`Found ${daysOutsideJobScope} days in range that are not covered by the job.`);
+      logger.info(`Found ${daysOutsideJobScope} days in range that are not covered by the job.`);
     }
   } else {
-    console.log(`No date range specified - downloading all ${daysWithData.length} days with data from the job.`);
+    logger.info(`No date range specified - downloading all ${daysWithData.length} days with data from the job.`);
     if (daysWithData.length > 0) {
       const allDates = [...daysWithData].sort();
       const firstDate = allDates[0];
       const lastDate = allDates[allDates.length - 1];
-      console.log(`Available data spans from ${firstDate} to ${lastDate}.`);
+      logger.info(`Available data spans from ${firstDate} to ${lastDate}.`);
     }
   }
 
   if (daysToDownload.length === 0) {
-    console.log("No days with data to download. Exiting.");
+    logger.info("No days with data to download. Exiting.");
     return;
   }
 
   daysToDownload.sort();
   const startTime = Date.now();
-  console.log(`Starting ${daysToDownload.length} concurrent downloads...`);
+  logger.info(`Starting ${daysToDownload.length} concurrent downloads...`);
 
   let completedCount = 0;
   let failedCount = 0;
@@ -236,9 +237,9 @@ async function downloadCustomJobExports({ jobIdentifier, userStart, userEnd }) {
   progressBar.stop();
 
   if (failedCount > 0) {
-    console.log(colors.red(`\n✗ Completed with ${failedCount} failed downloads`));
+    logger.info(colors.red(`✗ Completed with ${failedCount} failed downloads`));
   } else {
-    console.log(colors.green(`\n✓ All ${completedCount} downloads completed successfully`));
+    logger.info(colors.green(`✓ All ${completedCount} downloads completed successfully`));
   }
 
   const successCount = results.filter(result => result !== null).length;
@@ -246,29 +247,29 @@ async function downloadCustomJobExports({ jobIdentifier, userStart, userEnd }) {
   const totalTimeSeconds = Math.round((Date.now() - startTime) / 1000);
   const filesPerSecond = totalTimeSeconds > 0 ? Math.round((successCount / totalTimeSeconds) * 10) / 10 : 'N/A';
 
-  console.log("\n=== Download Summary ===");
-  console.log(`Total days with data: ${daysWithData.length}`);
-  console.log(`Total days with no data (skipped): ${emptyDays.length}`);
+  logger.info("=== Download Summary ===");
+  logger.info(`Total days with data: ${daysWithData.length}`);
+  logger.info(`Total days with no data (skipped): ${emptyDays.length}`);
 
   if (userStart && userEnd) {
-    console.log(`Total days in selected date range: ${totalDaysInRange}`);
-    console.log(`Days with data in range: ${daysToDownload.length}`);
-    console.log(`Days with no data in range (skipped): ${emptyDaysInRange.length}`);
+    logger.info(`Total days in selected date range: ${totalDaysInRange}`);
+    logger.info(`Days with data in range: ${daysToDownload.length}`);
+    logger.info(`Days with no data in range (skipped): ${emptyDaysInRange.length}`);
   } else {
-    console.log(`Downloaded full job data (no date filter applied)`);
+    logger.info(`Downloaded full job data (no date filter applied)`);
   }
 
-  console.log(`Total days to download: ${daysToDownload.length}`);
-  console.log(`Successfully downloaded: ${successCount}`);
-  console.log(`Failed downloads: ${failedDays.length}`);
-  console.log(`Time taken: ${totalTimeSeconds} seconds (${filesPerSecond} files/sec)`);
+  logger.info(`Total days to download: ${daysToDownload.length}`);
+  logger.info(`Successfully downloaded: ${successCount}`);
+  logger.info(`Failed downloads: ${failedDays.length}`);
+  logger.info(`Time taken: ${totalTimeSeconds} seconds (${filesPerSecond} files/sec)`);
 
   if (failedDays.length > 0) {
-    console.log("Failed days:", failedDays.slice(0, 10).join(', ') +
+    logger.info("Failed days:", failedDays.slice(0, 10).join(', ') +
       (failedDays.length > 10 ? ` and ${failedDays.length - 10} more...` : ''));
   }
 
-  console.log(`\nFiles saved to: ${jobFolder}`);
+  logger.info(`Files saved to: ${jobFolder}`);
   // Return the main job folder path (for further processing)
   return jobFolder;
 }

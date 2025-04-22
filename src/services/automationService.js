@@ -4,6 +4,7 @@ const { createExportJob, findExistingJob, pollExportJobCompletion } = require('.
 const { processFiles } = require('./fileProcessor');
 const { getPreviousWeekDates, getPreviousMonthDates } = require('../utils/dateUtils');
 const { validateDate, validateDateRange } = require('../utils/validation');
+const logger = require('../utils/logger');
 
 const resourceType = 'Messages';
 
@@ -24,7 +25,7 @@ async function runAutomation(args) {
       const dates = getPreviousWeekDates();
       startDate = dates.monday;
       endDate = dates.sunday;
-      console.log('Processing previous week\'s data');
+      logger.info('Processing previous week\'s data');
     }
     else if (args[0] === '--month') {
       // Month flag: Previous month
@@ -32,12 +33,12 @@ async function runAutomation(args) {
       startDate = dates.start;
       endDate = dates.end;
       jobPrefix = 'Job_Month';
-      console.log('Processing previous month\'s data');
+      logger.info('Processing previous month\'s data');
     }
     else if (args.length === 1) {
       // Single argument: Job identifier
       jobIdentifier = args[0];
-      console.log(`Looking up specific job: ${jobIdentifier}`);
+      logger.info(`Looking up specific job: ${jobIdentifier}`);
     }
     else if (args.length >= 2) {
       // Check if first argument is --name
@@ -60,17 +61,17 @@ async function runAutomation(args) {
 
     if (jobIdentifier) {
       // Direct download of existing job
-      console.log(`Downloading job ${jobIdentifier}...`);
+      logger.info(`Downloading job ${jobIdentifier}...`);
       const jobFolder = await downloadCustomJobExports({ jobIdentifier });
       await processFiles(jobFolder);
       return { success: true, jobFolder };
     }
 
-    console.log(`Looking for export job covering ${startDate} to ${endDate}...`);
+    logger.info(`Looking for export job covering ${startDate} to ${endDate}...`);
     
     // Calculate expected days based on date range
     const expectedDays = moment(endDate).diff(moment(startDate), 'days') + 1;
-    console.log(`Expecting ${expectedDays} days of data...`);
+    logger.info(`Expecting ${expectedDays} days of data...`);
     
     const existingJobResult = await findExistingJob(resourceType, startDate, endDate, expectedDays);
     let job;
@@ -79,7 +80,7 @@ async function runAutomation(args) {
       job = existingJobResult.job;
       
       if (existingJobResult.needsWaiting) {
-        console.log('Waiting for existing job to complete...');
+        logger.info('Waiting for existing job to complete...');
         job = await pollExportJobCompletion(
           resourceType,
           job.jobSid,
@@ -92,7 +93,7 @@ async function runAutomation(args) {
         );
       }
     } else {
-      console.log('No existing job found, creating new export job...');
+      logger.info('No existing job found, creating new export job...');
 
       // Format the job name based on the type or custom name
       const jobDate = moment(startDate);
@@ -109,7 +110,7 @@ async function runAutomation(args) {
         friendlyName,
       });
 
-      console.log('Waiting for export job to complete...');
+      logger.info('Waiting for export job to complete...');
       job = await pollExportJobCompletion(
         resourceType,
         job.jobSid,
@@ -122,21 +123,21 @@ async function runAutomation(args) {
       );
     }
 
-    console.log('Starting download of completed export job...');
+    logger.info('Starting download of completed export job...');
     const jobFolder = await downloadCustomJobExports({
       jobIdentifier: job.jobSid,
       userStart: startDate,
       userEnd: endDate
     });
 
-    console.log('Processing downloaded files...');
+    logger.info('Processing downloaded files...');
     await processFiles(jobFolder);
     
-    console.log('✔ Export automation completed successfully');
+    logger.info('✔ Export automation completed successfully');
     return { success: true, jobFolder };
 
   } catch (error) {
-    console.error('✗ Export automation failed:', error.message);
+    logger.error('✗ Export automation failed:', error.message);
     return { success: false, error: error.message };
   }
 }
