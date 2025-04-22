@@ -85,6 +85,19 @@ npm run download:custom -- --name quarterly_report 2025-04-01 2025-06-30
 
 ---
 
+## Logs
+
+All execution activity is recorded in log files for traceability and troubleshooting.
+
+- Logs are saved in the `logs/` directory (auto-created on run)
+- Two files are generated:
+  - `logs/combined.log`: General information logs
+  - `logs/error.log`: Only error-level logs
+- Logs are appended across multiple runs (not overwritten)
+- Terminal output is colorized for readability, but logs are saved as clean plain text
+
+---
+
 ## Limitations
 
 - Date ranges must not exceed **366 days**
@@ -97,4 +110,3 @@ npm run download:custom -- --name quarterly_report 2025-04-01 2025-06-30
 ## License
 
 This project is licensed under the **GNU General Public License v3.0**. See the [LICENSE](LICENSE) file for details.
-
