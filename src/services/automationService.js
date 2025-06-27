@@ -5,6 +5,7 @@ const { processFiles } = require('./fileProcessor');
 const { getPreviousWeekDates, getPreviousMonthDates } = require('../utils/dateUtils');
 const { validateDate, validateDateRange } = require('../utils/validation');
 const logger = require('../utils/logger');
+const { testConnection } = require('./twilio/client');
 
 const resourceType = 'Messages';
 
@@ -16,6 +17,14 @@ const resourceType = 'Messages';
  */
 async function runAutomation(args) {
   try {
+    // First test Twilio API connectivity
+    const connectionSuccess = await testConnection();
+    if (!connectionSuccess) {
+      throw new Error('Failed to connect to Twilio API. Please check your credentials and network connection.');
+    }
+    
+    logger.info('Twilio API connection test passed successfully');
+    
     let startDate, endDate, jobIdentifier, customJobName;
     let jobPrefix = 'Job_Week'; // Default prefix
 
@@ -131,13 +140,46 @@ async function runAutomation(args) {
     });
 
     logger.info('Processing downloaded files...');
-    await processFiles(jobFolder);
+    const processingResult = await processFiles(jobFolder);
     
-    logger.info('✔ Export automation completed successfully');
-    return { success: true, jobFolder };
+    if (processingResult && processingResult.count > 0) {
+      logger.info(`✔ Export automation completed successfully with ${processingResult.count} records`, {
+        recordCount: processingResult.count,
+        csvPath: processingResult.path,
+        jobFolder
+      });
+      return { 
+        success: true, 
+        jobFolder,
+        recordCount: processingResult.count,
+        csvPath: processingResult.path
+      };
+    } else {
+      logger.warn('Export completed, but no records were processed');
+      return { success: true, jobFolder, recordCount: 0 };
+    }
 
   } catch (error) {
-    logger.error('✗ Export automation failed:', error.message);
+    // Detailed error logging
+    logger.error('✗ Export automation failed', { 
+      error: error.message, 
+      stack: error.stack,
+      args: JSON.stringify(args)
+    });
+    
+    // User-friendly error output
+    console.error('\n===== ERROR DETAILS =====');
+    console.error(error.message);
+    
+    // If it's an authentication error, provide more helpful information
+    if (error.message.includes('unauthorized') || error.message.includes('auth')) {
+      console.error('\nThis appears to be an authentication error. Please check:');
+      console.error('1. Your Twilio credentials in the .env file are correct');
+      console.error('2. Your account has access to the Bulk Exports API');
+      console.error('3. Your account is not suspended or restricted');
+    }
+    
+    // Return error for programmatic handling
     return { success: false, error: error.message };
   }
 }

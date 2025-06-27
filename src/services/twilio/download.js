@@ -5,19 +5,43 @@ const config = require('../../config/config');
 const { generateDaysBetweenDates } = require('../../utils/dateUtils');
 const { colors, cliProgress } = require('../../utils/progress');
 const logger = require('../../utils/logger');
+const { client } = require('./client');
 
 /**
- * Lists custom export jobs for Messages from Twilio.
+ * Lists custom export jobs for Messages from Twilio using the official Twilio client.
+ * 
+ * @returns {Promise<Array>} Array of Twilio export jobs
+ * @throws {Error} If the API call fails
  */
 async function listExportCustomJobs() {
   try {
-    const jobsUrl = `${config.twilioBaseUrl}/Jobs?PageSize=1000`;
-    const response = await axios.get(jobsUrl, { auth: config.auth });
-    const jobs = response.data.jobs || response.data;
+    logger.info('Fetching export jobs using Twilio client');
+    
+    // Use the official Twilio client
+    const jobs = await client
+      .bulkexports.v1
+      .exports('Messages')
+      .exportCustomJobs
+      .list({ limit: 400 });
+    
+    if (!Array.isArray(jobs)) {
+      throw new Error('Unexpected response format from Twilio API');
+    }
+    
+    logger.info(`Successfully retrieved ${jobs.length} jobs`);
     return jobs;
   } catch (error) {
-    logger.error("Error listing export custom jobs:", error.message);
-    throw error;
+    // Log detailed error information
+    logger.error("Error listing export custom jobs", { 
+      error: error.message,
+      code: error.code,
+      status: error.status,
+      moreInfo: error.moreInfo,
+      details: error.details
+    });
+    
+    // Re-throw with more details
+    throw new Error(`Failed to list Twilio export jobs: ${error.message}`);
   }
 }
 
@@ -69,6 +93,15 @@ function extractDaysFromJob(job) {
 
 /**
  * Download a single day's export file with retry functionality.
+ * 
+ * @param {string} dayStr - The day string in YYYY-MM-DD format
+ * @param {string} targetFolder - The folder to save the file to
+ * @param {number} index - The index of this day in the total days
+ * @param {number} total - The total number of days
+ * @param {object} progressBar - The progress bar instance
+ * @param {number} maxRetries - Maximum number of retries
+ * @returns {Promise<object>} The result object with day, file path and size
+ * @throws {Error} If download fails after all retries
  */
 async function downloadWithRetry(dayStr, targetFolder, index, total, progressBar, maxRetries = config.maxRetries) {
   let attempts = 0;
@@ -78,16 +111,35 @@ async function downloadWithRetry(dayStr, targetFolder, index, total, progressBar
     try {
       attempts++;
       if (attempts > 1) {
-        logger.info(`⟳ [${index + 1}/${total}] Retry attempt ${attempts - 1}/${maxRetries} for ${dayStr}...`);
+        // Log retry attempts with metadata
+        logger.info(`Retry attempt ${attempts - 1}/${maxRetries} for ${dayStr}`, {
+          day: dayStr,
+          attempt: attempts,
+          maxRetries,
+          index: index + 1,
+          total
+        });
       }
 
-      const dayUrl = `${config.twilioBaseUrl}/Days/${encodeURIComponent(dayStr)}`;
-      const response = await axios.get(dayUrl, {
+      // First get the redirect URL using the Twilio client
+      const dayInfo = await client.bulkexports.v1
+        .exports('Messages')
+        .days(dayStr)
+        .fetch();
+      
+      if (!dayInfo || !dayInfo.redirectTo) {
+        throw new Error(`No redirect URL returned for day ${dayStr}`);
+      }
+      
+      logger.debug(`Got redirect URL for day ${dayStr}`);
+      
+      // Now download the file from the redirect URL
+      const response = await axios.get(dayInfo.redirectTo, {
         responseType: 'stream',
-        auth: config.auth,
         validateStatus: status => status < 400,
         timeout: config.timeout
       });
+      
       const contentLength = response.headers['content-length'];
       // Save into the targetFolder (which will be the "files" subfolder)
       const filename = `export_${dayStr}.json.gz`;
@@ -96,17 +148,44 @@ async function downloadWithRetry(dayStr, targetFolder, index, total, progressBar
       response.data.pipe(writer);
 
       const result = await new Promise((resolve, reject) => {
-        writer.on('finish', () => resolve({ dayStr, filePath, size: contentLength }));
-        writer.on('error', (err) => reject(err));
+        writer.on('finish', () => {
+          logger.debug(`Successfully downloaded file for ${dayStr}`, {
+            day: dayStr,
+            filePath,
+            size: contentLength ? `${Math.round(contentLength / 1024)} KB` : 'unknown'
+          });
+          resolve({ dayStr, filePath, size: contentLength });
+        });
+        writer.on('error', (err) => {
+          logger.error(`File write error for ${dayStr}`, {
+            day: dayStr,
+            filePath,
+            error: err.message
+          });
+          reject(err);
+        });
       });
       return result;
     } catch (error) {
       lastError = error;
+      // Log detailed error information
+      const errorMeta = {
+        day: dayStr,
+        attempt: attempts,
+        maxRetries,
+        error: error.message,
+        index: index + 1,
+        total,
+        code: error.code,
+        status: error.status
+      };
+      
       if (attempts > maxRetries) {
-        logger.info(`✗ [${index + 1}/${total}] Failed to download ${dayStr} after ${maxRetries + 1} attempts: ${error.message}`);
-      }
-      if (attempts <= maxRetries) {
-        const delay = 1000 * attempts;
+        logger.error(`✗ [${index + 1}/${total}] Failed to download ${dayStr} after ${maxRetries + 1} attempts`, errorMeta);
+      } else {
+        logger.warn(`Download attempt ${attempts}/${maxRetries + 1} failed for ${dayStr}`, errorMeta);
+        const delay = 1000 * Math.pow(2, attempts - 1); // Exponential backoff
+        logger.debug(`Waiting ${delay}ms before retry...`);
         await new Promise(resolve => setTimeout(resolve, delay));
       }
     }
@@ -122,27 +201,42 @@ async function downloadWithRetry(dayStr, targetFolder, index, total, progressBar
  * Files will be saved in downloads/job_name/files and the job folder itself is returned.
  */
 async function downloadCustomJobExports({ jobIdentifier, userStart, userEnd }) {
-  logger.info("Starting Twilio export download...");
+  try {
+    logger.info("Starting Twilio export download...", { jobIdentifier, userStart, userEnd });
 
-  const jobs = await listExportCustomJobs();
-  logger.info(`Found ${jobs.length} job(s).`);
+    // Validate jobIdentifier
+    if (!jobIdentifier) {
+      throw new Error('Job identifier is required');
+    }
+    
+    // Import testConnection from client
+    const { testConnection } = require('./client');
+    
+    // Test the API connection first
+    const connectionSuccess = await testConnection();
+    if (!connectionSuccess) {
+      throw new Error('Cannot connect to Twilio API. Please check your credentials and network connection.');
+    }
 
-  const myJob = jobs.find(job =>
-    job.job_sid === jobIdentifier ||
-    (job.friendly_name && job.friendly_name.includes(jobIdentifier))
-  );
+    const jobs = await listExportCustomJobs();
+    logger.info(`Found ${jobs.length} job(s).`);
 
-  if (!myJob) {
-    logger.error(`Job not found with identifier: ${jobIdentifier}`);
-    logger.info("Available jobs:");
-    jobs.forEach(job => logger.info(` - ${job.friendly_name} (${job.job_sid})`));
-    return;
-  }
+    const myJob = jobs.find(job =>
+      job.jobSid === jobIdentifier ||
+      (job.friendlyName && job.friendlyName.includes(jobIdentifier))
+    );
 
-  logger.info(`Using job: "${myJob.friendly_name}" (SID: ${myJob.job_sid})`);
+    if (!myJob) {
+      logger.error(`Job not found with identifier: ${jobIdentifier}`);
+      logger.info("Available jobs:");
+      jobs.forEach(job => logger.info(` - ${job.friendlyName || 'No Name'} (${job.jobSid})`));
+      throw new Error(`Job not found with identifier: ${jobIdentifier}`);
+    }
+
+    logger.info(`Using job: "${myJob.friendlyName}" (SID: ${myJob.jobSid})`);
 
   // Create the main job folder (downloads/job_name)
-  const jobFolderName = myJob.friendly_name ? sanitizeFolderName(myJob.friendly_name) : myJob.job_sid;
+  const jobFolderName = myJob.friendlyName ? sanitizeFolderName(myJob.friendlyName) : myJob.jobSid;
   const jobFolder = join(config.downloadsFolder, jobFolderName);
   fsExtra.ensureDirSync(jobFolder);
   logger.info(`Created job folder: ${jobFolder}`);
@@ -272,6 +366,15 @@ async function downloadCustomJobExports({ jobIdentifier, userStart, userEnd }) {
   logger.info(`Files saved to: ${jobFolder}`);
   // Return the main job folder path (for further processing)
   return jobFolder;
+  } catch (error) {
+    logger.error("Error in downloadCustomJobExports", { 
+      error: error.message, 
+      jobIdentifier, 
+      userStart, 
+      userEnd 
+    });
+    throw error; // Re-throw to be handled by the caller
+  }
 }
 
 module.exports = {
