@@ -112,6 +112,8 @@ async function runAutomation(args) {
           ? `${jobPrefix}_${jobDate.format('YYYY_MM')}`
           : `${jobPrefix}_${startDate.replace(/-/g, '_')}`;
 
+      logger.info(`Creating new export job with name: ${friendlyName}`);
+      
       job = await createExportJob({
         resourceType: 'Messages',
         startDay: startDate,
@@ -120,6 +122,9 @@ async function runAutomation(args) {
       });
 
       logger.info('Waiting for export job to complete...');
+      logger.info('This may take several minutes depending on the date range size.');
+      logger.info('Twilio needs to process each day of data before it\'s available for download.');
+      
       job = await pollExportJobCompletion(
         resourceType,
         job.jobSid,
