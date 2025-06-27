@@ -260,6 +260,10 @@ async function pollExportJobCompletion(resourceType, jobSid, expectedDays, maxWa
 /**
  * Check for an existing export job for the given date range that has all days (data or empty).
  */
+/**
+ * Check for an existing export job for the given date range that has all days (data or empty).
+ * Also verifies that at least one day's file is available for download.
+ */
 async function findExistingJob(resourceType, startDate, endDate, expectedDays) {
   try {
     logger.info(`Looking for existing job for date range ${startDate} to ${endDate}`);
@@ -291,11 +295,58 @@ async function findExistingJob(resourceType, startDate, endDate, expectedDays) {
           return { job, needsWaiting: true };
         }
 
-        return { job, needsWaiting: false };
+        // Verify file availability by checking one day (the first day with data)
+        // This prevents using jobs where data files have expired
+        let sampleDay = null;
+        if (job.details && Array.isArray(job.details)) {
+          for (const detail of job.details) {
+            if (detail.status === 'Completed' && Array.isArray(detail.days) && detail.days.length > 0) {
+              sampleDay = detail.days[0];
+              break;
+            }
+          }
+        }
+
+        if (sampleDay) {
+          try {
+            logger.info(`Verifying availability of data files by checking day ${sampleDay}...`);
+            
+            // Try to fetch the redirect URL for one day to verify files are still available
+            const dayInfo = await client.bulkexports.v1
+              .exports(resourceType)
+              .days(sampleDay)
+              .fetch();
+              
+            if (dayInfo && dayInfo.redirectTo) {
+              logger.info(`Verified files are still available - using existing job`);
+              return { job, needsWaiting: false };
+            } else {
+              logger.warn(`Files for job ${job.jobSid} appear to be unavailable - will create new job`);
+            }
+          } catch (err) {
+            if (err.status === 404) {
+              logger.warn(`Files for job ${job.jobSid} have expired (404 Not Found) - will create new job`, {
+                jobSid: job.jobSid,
+                error: err.message,
+                status: err.status
+              });
+            } else {
+              logger.warn(`Error checking file availability for job ${job.jobSid} - will create new job`, {
+                jobSid: job.jobSid,
+                error: err.message,
+                status: err.status
+              });
+            }
+            // Continue to the next job or create a new one
+            continue;
+          }
+        } else {
+          logger.warn(`Could not find a day with data to verify file availability - will create new job`);
+        }
       }
     }
     
-    logger.info(`No existing job found for date range ${startDate} to ${endDate}`);
+    logger.info(`No usable existing job found for date range ${startDate} to ${endDate} - will create new job`);
     return null;
   } catch (error) {
     logger.error(`Error finding existing job`, { 

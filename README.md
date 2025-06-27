@@ -82,22 +82,29 @@ npm run download:custom -- --name quarterly_report 2025-04-01 2025-06-30
 
 ---
 
-## Output
+## Limitations
 
-- Raw downloaded files: `./downloads/<job_name>/files/*.json.gz`
-- Processed CSV export: `./downloads/<job_name>/export.csv`
+### File Availability
+
+Twilio only keeps the downloadable export files available for a **limited time** (typically a few days). After that period, the job information will still appear in the API, but the actual files will return 404 errors when requested.
+
+The tool handles this automatically by:
+1. First checking if a job already exists for the requested date range
+2. Verifying that the files are still available for download
+3. Creating a new export job if the existing job's files have expired
+
+This behavior ensures you always get the data, even if it means creating a new export job for a date range you've exported before.
+
+### Rate Limits
+
+Twilio has API rate limits that may affect large exports:
+- Requests per second limits (on both job creation and file downloads)
+- Maximum number of concurrent export jobs
+- Maximum number of days per export job
+
+The tool includes built-in retry logic and handles rate limiting gracefully.
 
 ---
-
-## Logs
-
-All execution activity is recorded in log files for traceability and troubleshooting.
-
-- Logs are saved in the `logs/` directory (auto-created on run)
-- Two files are generated:
-  - `logs/combined.log`: General information logs
-  - `logs/error.log`: Only error-level logs
-- Logs are appended across multiple runs (not overwritten)
 - Terminal output is colorized for readability, but logs are saved as clean plain text
 
 ---
